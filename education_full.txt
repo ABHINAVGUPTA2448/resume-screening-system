@@ -1,0 +1,762 @@
+import re
+
+
+# ============================================================
+# DEGREE HIERARCHY
+# ============================================================
+
+DEGREE_LEVELS = {
+    "high_school": 1,
+    "diploma": 2,
+    "associate": 3,
+    "bachelor": 4,
+    "master": 5,
+    "phd": 6,
+}
+
+
+# ============================================================
+# DEGREE ALIASES
+# ============================================================
+
+DEGREE_ALIASES = {
+
+    "bachelor": [
+        "bachelor",
+        "bachelors",
+        "bachelor's",
+        "b tech",
+        "b.tech",
+        "btech",
+        "b e",
+        "b.e",
+        "be",
+        "b sc",
+        "b.sc",
+        "bsc",
+        "bca",
+        "undergraduate",
+    ],
+
+    "master": [
+        "master",
+        "masters",
+        "master's",
+        "m tech",
+        "m.tech",
+        "mtech",
+        "m e",
+        "m.e",
+        "me",
+        "m sc",
+        "m.sc",
+        "msc",
+        "mca",
+        "mba",
+        "postgraduate",
+    ],
+
+    "phd": [
+        "phd",
+        "ph.d",
+        "doctorate",
+        "doctoral",
+    ],
+
+    "diploma": [
+        "diploma",
+        "polytechnic",
+    ],
+
+    "associate": [
+        "associate degree",
+        "associate's degree",
+    ],
+}
+
+
+# ============================================================
+# FIELD ALIASES
+# ============================================================
+
+FIELD_ALIASES = {
+
+    "computer science": [
+        "computer science",
+        "computer science engineering",
+        "computer engineering",
+        "cse",
+    ],
+
+    "information technology": [
+        "information technology",
+        "information tech",
+    ],
+
+    "data science": [
+        "data science",
+        "data sciences",
+    ],
+
+    "artificial intelligence": [
+        "artificial intelligence",
+        "artificial intelligence and machine learning",
+        "aiml",
+        "ai/ml",
+    ],
+
+    "machine learning": [
+        "machine learning",
+    ],
+
+    "electronics": [
+        "electronics",
+        "electronics engineering",
+        "electronics and communication",
+        "ece",
+    ],
+
+    "electrical engineering": [
+        "electrical engineering",
+        "eee",
+    ],
+
+    "mechanical engineering": [
+        "mechanical engineering",
+    ],
+
+    "civil engineering": [
+        "civil engineering",
+    ],
+
+    "mathematics": [
+        "mathematics",
+        "mathematical science",
+    ],
+
+    "physics": [
+        "physics",
+    ],
+
+    "statistics": [
+        "statistics",
+        "statistical science",
+    ],
+}
+
+
+# ============================================================
+# EDUCATION SECTION
+# ============================================================
+
+EDUCATION_HEADINGS = [
+    "education",
+    "educational background",
+    "academic background",
+    "academic qualifications",
+    "qualifications",
+    "education and qualifications",
+]
+
+
+EDUCATION_STOP_HEADINGS = [
+    "experience",
+    "work experience",
+    "professional experience",
+    "employment",
+    "internship",
+    "internships",
+    "projects",
+    "academic projects",
+    "personal projects",
+    "skills",
+    "technical skills",
+    "certifications",
+    "certificates",
+    "achievements",
+    "awards",
+    "publications",
+    "languages",
+    "interests",
+    "hobbies",
+    "references",
+]
+
+
+# ============================================================
+# TEXT NORMALIZATION
+# ============================================================
+
+def normalize_text(text):
+    """Normalize text for reliable matching."""
+
+    if not text:
+        return ""
+
+    text = text.lower()
+
+    text = text.replace("â€“", "-")
+    text = text.replace("â€”", "-")
+
+    text = re.sub(r"\s+", " ", text)
+
+    return text.strip()
+
+
+# ============================================================
+# SECTION EXTRACTION
+# ============================================================
+
+def extract_education_section(text):
+    """
+    Extract only the education section from a resume.
+
+    This prevents fields mentioned in:
+        Projects
+        Skills
+        Experience
+        Certifications
+
+    from being incorrectly interpreted as academic fields.
+    """
+
+    if not text:
+        return ""
+
+    text = text.replace("\r\n", "\n")
+    text = text.replace("\r", "\n")
+
+    lines = []
+
+    for line in text.split("\n"):
+
+        line = re.sub(r"\s+", " ", line).strip()
+
+        if line:
+            lines.append(line)
+
+    start_index = None
+
+    # Find education heading
+    for i, line in enumerate(lines):
+
+        clean = line.lower().strip(" :-")
+
+        if clean in EDUCATION_HEADINGS:
+
+            start_index = i + 1
+            break
+
+    # If no education heading exists,
+    # return the complete text as fallback.
+    if start_index is None:
+
+        return normalize_text(text)
+
+    education_lines = []
+
+    for line in lines[start_index:]:
+
+        clean = line.lower().strip(" :-")
+
+        if clean in EDUCATION_STOP_HEADINGS:
+            break
+
+        education_lines.append(line)
+
+    return normalize_text(
+        "\n".join(education_lines)
+    )
+
+
+# ============================================================
+# DEGREE EXTRACTION
+# ============================================================
+
+def extract_degree_levels(text):
+    """
+    Detect degree levels from education-related text.
+    """
+
+    text = normalize_text(text)
+
+    detected = set()
+
+    for degree, aliases in DEGREE_ALIASES.items():
+
+        for alias in aliases:
+
+            alias = normalize_text(alias)
+
+            pattern = (
+                r"(?<!\w)"
+                + re.escape(alias)
+                + r"(?!\w)"
+            )
+
+            if re.search(
+                pattern,
+                text,
+                re.IGNORECASE
+            ):
+
+                detected.add(degree)
+                break
+
+    return detected
+
+
+# ============================================================
+# FIELD EXTRACTION
+# ============================================================
+
+def extract_fields(text):
+    """
+    Detect academic fields.
+
+    Important:
+    Short ambiguous aliases such as:
+        AI
+        ML
+        IT
+        ME
+
+    are deliberately NOT used.
+
+    This prevents false positives from normal resume text.
+    """
+
+    text = normalize_text(text)
+
+    detected = set()
+
+    for field, aliases in FIELD_ALIASES.items():
+
+        for alias in aliases:
+
+            alias = normalize_text(alias)
+
+            pattern = (
+                r"(?<!\w)"
+                + re.escape(alias)
+                + r"(?!\w)"
+            )
+
+            if re.search(
+                pattern,
+                text,
+                re.IGNORECASE
+            ):
+
+                detected.add(field)
+                break
+
+    return detected
+
+
+# ============================================================
+# EDUCATION PROFILE
+# ============================================================
+
+def extract_education_profile(text):
+    """
+    Build structured candidate education profile.
+    """
+
+    education_text = extract_education_section(
+        text
+    )
+
+    degrees = extract_degree_levels(
+        education_text
+    )
+
+    fields = extract_fields(
+        education_text
+    )
+
+    degree_levels = [
+        DEGREE_LEVELS[degree]
+        for degree in degrees
+        if degree in DEGREE_LEVELS
+    ]
+
+    highest_degree = None
+
+    if degree_levels:
+
+        highest_level = max(
+            degree_levels
+        )
+
+        for degree, level in DEGREE_LEVELS.items():
+
+            if level == highest_level:
+
+                highest_degree = degree
+                break
+
+    return {
+        "degrees": degrees,
+        "fields": fields,
+        "highest_degree": highest_degree,
+        "education_text": education_text,
+    }
+
+
+# ============================================================
+# JD EDUCATION REQUIREMENT
+# ============================================================
+
+def extract_jd_education_requirement(jd_text):
+    """
+    Extract education requirements from a job description.
+    """
+
+    text = normalize_text(jd_text)
+
+    education_match = re.search(
+        r"education\s*:(.*?)(?="
+        r"required skills?|"
+        r"preferred skills?|"
+        r"experience\s*:|"
+        r"responsibilities\s*:|"
+        r"$)",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    if education_match:
+
+        education_text = (
+            education_match.group(1)
+        )
+
+    else:
+
+        education_text = text
+
+    degrees = extract_degree_levels(
+        education_text
+    )
+
+    fields = extract_fields(
+        education_text
+    )
+
+    return {
+        "degrees": degrees,
+        "fields": fields,
+        "raw_text": education_text.strip(),
+    }
+
+
+# ============================================================
+# DEGREE COMPATIBILITY
+# ============================================================
+
+def compare_degree(
+    candidate_profile,
+    requirement,
+):
+    """
+    Compare candidate degree against JD requirement.
+    """
+
+    required_degrees = requirement.get(
+        "degrees",
+        set(),
+    )
+
+    candidate_degree = candidate_profile.get(
+        "highest_degree"
+    )
+
+    if not required_degrees:
+
+        return {
+            "score": 100.0,
+            "status": "NO_DEGREE_REQUIREMENT",
+        }
+
+    if not candidate_degree:
+
+        return {
+            "score": 0.0,
+            "status": "DEGREE_NOT_FOUND",
+        }
+
+    candidate_level = DEGREE_LEVELS.get(
+        candidate_degree,
+        0,
+    )
+
+    required_levels = [
+        DEGREE_LEVELS.get(
+            degree,
+            0,
+        )
+        for degree in required_degrees
+    ]
+
+    required_level = min(
+        required_levels
+    )
+
+    if candidate_level >= required_level:
+
+        return {
+            "score": 100.0,
+            "status": "DEGREE_SATISFIED",
+        }
+
+    return {
+        "score": 0.0,
+        "status": "DEGREE_BELOW_REQUIREMENT",
+    }
+
+
+# ============================================================
+# FIELD COMPATIBILITY
+# ============================================================
+
+def compare_field(
+    candidate_profile,
+    requirement,
+):
+    """
+    Compare candidate academic fields
+    against JD accepted fields.
+    """
+
+    required_fields = requirement.get(
+        "fields",
+        set(),
+    )
+
+    candidate_fields = candidate_profile.get(
+        "fields",
+        set(),
+    )
+
+    if not required_fields:
+
+        return {
+            "score": 100.0,
+            "status": "NO_FIELD_REQUIREMENT",
+            "matched_fields": set(),
+        }
+
+    if not candidate_fields:
+
+        return {
+            "score": 0.0,
+            "status": "FIELD_NOT_FOUND",
+            "matched_fields": set(),
+        }
+
+    matched_fields = (
+        candidate_fields
+        & required_fields
+    )
+
+    if matched_fields:
+
+        return {
+            "score": 100.0,
+            "status": "FIELD_SATISFIED",
+            "matched_fields": matched_fields,
+        }
+
+    return {
+        "score": 0.0,
+        "status": "FIELD_MISMATCH",
+        "matched_fields": set(),
+    }
+
+
+# ============================================================
+# COMPLETE EDUCATION MATCH
+# ============================================================
+
+def calculate_education_match(
+    candidate_text,
+    jd_text,
+):
+    """
+    Calculate complete education compatibility.
+    """
+
+    candidate_profile = (
+        extract_education_profile(
+            candidate_text
+        )
+    )
+
+    requirement = (
+        extract_jd_education_requirement(
+            jd_text
+        )
+    )
+
+    degree_result = compare_degree(
+        candidate_profile,
+        requirement,
+    )
+
+    field_result = compare_field(
+        candidate_profile,
+        requirement,
+    )
+
+    education_score = (
+        0.60 * degree_result["score"]
+        +
+        0.40 * field_result["score"]
+    )
+
+    return {
+
+        "candidate": candidate_profile,
+
+        "requirement": requirement,
+
+        "degree_match": degree_result,
+
+        "field_match": field_result,
+
+        "education_score": round(
+            education_score,
+            2,
+        ),
+    }
+
+
+# ============================================================
+# TEST
+# ============================================================
+
+if __name__ == "__main__":
+
+    jd = """
+    Job Title: Junior Machine Learning Engineer
+
+    Education:
+    Bachelor's degree in Computer Science,
+    Information Technology, Data Science,
+    or a related field.
+
+    Required Skills:
+    Python
+    Machine Learning
+    """
+
+    candidate = """
+    ABHINAV GUPTA
+
+    Education:
+    B.Tech in Computer Science Engineering
+
+    Projects:
+
+    Machine Learning Resume Screening System
+    Built using Python and Machine Learning.
+
+    Skills:
+
+    Python
+    Machine Learning
+    """
+
+    result = calculate_education_match(
+        candidate,
+        jd,
+    )
+
+    print("=" * 60)
+    print("EDUCATION MATCHING TEST")
+    print("=" * 60)
+
+    print("\nEducation Section Detected:")
+
+    print(
+        result["candidate"]["education_text"]
+    )
+
+    print("\nCandidate Education:")
+
+    print(
+        "  Degrees:",
+        sorted(
+            result["candidate"]["degrees"]
+        ),
+    )
+
+    print(
+        "  Fields:",
+        sorted(
+            result["candidate"]["fields"]
+        ),
+    )
+
+    print(
+        "  Highest Degree:",
+        result["candidate"]["highest_degree"]
+    )
+
+    print("\nJD Requirement:")
+
+    print(
+        "  Degrees:",
+        sorted(
+            result["requirement"]["degrees"]
+        ),
+    )
+
+    print(
+        "  Fields:",
+        sorted(
+            result["requirement"]["fields"]
+        ),
+    )
+
+    print("\nDegree Match:")
+
+    print(
+        "  Score:",
+        result["degree_match"]["score"],
+        "%",
+    )
+
+    print(
+        "  Status:",
+        result["degree_match"]["status"]
+    )
+
+    print("\nField Match:")
+
+    print(
+        "  Score:",
+        result["field_match"]["score"],
+        "%",
+    )
+
+    print(
+        "  Status:",
+        result["field_match"]["status"]
+    )
+
+    print(
+        "  Matched Fields:",
+        sorted(
+            result["field_match"]["matched_fields"]
+        ),
+    )
+
+    print("\nFinal Education Score:")
+
+    print(
+        " ",
+        result["education_score"],
+        "%",
+    )

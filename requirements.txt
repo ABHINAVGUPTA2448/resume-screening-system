@@ -1,0 +1,11 @@
+fastapi==0.142.1
+uvicorn==0.54.0
+python-multipart==0.0.32
+pymupdf==1.28.2
+pandas==3.0.6
+numpy==2.5.3
+scikit-learn==1.9.1
+sentence-transformers==6.1.0
+spacy==3.8.16
+streamlit==1.64.0
+requests==2.34.2
